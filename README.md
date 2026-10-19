@@ -99,7 +99,7 @@ The project requires the following Python libraries (available in `requirements.
 
 ## Author
 
-Agon
+Agon Selmani
 - GitHub: [agonselmani](https://github.com/agonselmani)
 
 ## Acknowledgements
