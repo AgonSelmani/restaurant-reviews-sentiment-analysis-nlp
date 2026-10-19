@@ -1,0 +1,25 @@
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# VS Code settings
+.vscode/
+
+# Environment variables (API keys, passwords)
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
