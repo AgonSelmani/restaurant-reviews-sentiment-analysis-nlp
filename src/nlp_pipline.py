@@ -1,6 +1,14 @@
-
+# =============================================================================
 # RESTAURANT REVIEWS SENTIMENT ANALYSIS - NLP PIPELINE
-
+# =============================================================================
+# 
+# This script performs sentiment analysis on restaurant reviews using:
+#   - Natural Language Processing (NLP) for text cleaning.
+#   - Bag of Words model (CountVectorizer) for feature extraction.
+#   - 80/20 Train-Test Split to prevent data leakage.
+#   - Grid Search on the Training set to tune hyperparameters.
+#   - Final unbiased evaluation on the unseen Test set.
+# =============================================================================
 
 import re
 import nltk
@@ -11,10 +19,11 @@ import matplotlib.pyplot as plt
 from nltk.corpus import stopwords
 from nltk.stem.porter import PorterStemmer
 from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.model_selection import GridSearchCV, cross_validate
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.naive_bayes import GaussianNB, MultinomialNB
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 
 
 # =============================================================================
@@ -49,27 +58,16 @@ def clean_reviews(dataset):
     corpus = []
     ps = PorterStemmer()
     
-    # Get stopwords and remove 'not' (because it carries sentiment)
     all_stopwords = stopwords.words('english')
     all_stopwords.remove('not')
-    stopword_set = set(all_stopwords)  # Use a set for O(1) lookup
+    stopword_set = set(all_stopwords)
     
     for i in range(len(dataset)):
-        # Step 1: Remove non-letter characters
         review = re.sub('[^a-zA-Z]', ' ', dataset['Review'][i])
-        
-        # Step 2: Lowercase
         review = review.lower()
-        
-        # Step 3: Split into words
         review = review.split()
-        
-        # Step 4: Stem and remove stopwords
         review = [ps.stem(word) for word in review if word not in stopword_set]
-        
-        # Step 5: Join back into a string
         review = ' '.join(review)
-        
         corpus.append(review)
     
     print(f"Cleaned {len(corpus)} reviews.")
@@ -89,57 +87,45 @@ def build_bag_of_words(corpus, max_features=1500):
 
 
 # =============================================================================
-# 5. TUNE AND EVALUATE MODELS
+# 5. TUNE ON TRAIN SET & EVALUATE ON TEST SET
 # =============================================================================
 
-def tune_and_evaluate(model_name, classifier, param_grid, X, y, cv=10):
+def tune_and_evaluate(model_name, classifier, param_grid, X_train, y_train, X_test, y_test, cv=10):
     """
-    Tune a model using GridSearchCV, then evaluate it using 
-    cross_validate to get Accuracy, Precision, Recall, and F1-Score.
+    Tune a model using GridSearchCV on the Training set, 
+    then evaluate it once on the unseen Test set.
     """
     print(f"\nProcessing: {model_name}")
     
-    # 1. Tuning (Grid Search)
+    # 1. Tuning (Grid Search on the Training Data ONLY)
     if param_grid:
         grid_search = GridSearchCV(
             estimator=classifier, 
             param_grid=param_grid, 
-            scoring="f1", 
+            scoring="f1",  # We tune using F1-Score
             cv=cv, 
             n_jobs=-1
         )
-        grid_search.fit(X, y)
+        grid_search.fit(X_train, y_train)
         best_model = grid_search.best_estimator_
         best_params = grid_search.best_params_
+        print(f"  -> Best Params found on Train Set: {best_params}")
     else:
         # If no grid is provided (e.g., GaussianNB)
         best_model = classifier
+        best_model.fit(X_train, y_train)
         best_params = "N/A"
+        print("  -> No hyperparameters to tune. Trained with default settings.")
         
-    # 2. Final Evaluation (Cross-Validation for all metrics)
-    scoring_metrics = {
-        'accuracy': 'accuracy',
-        'precision': 'precision',
-        'recall': 'recall',
-        'f1': 'f1'
-    }
-    
-    cv_results = cross_validate(
-        best_model, X, y, cv=cv, scoring=scoring_metrics, n_jobs=-1
-    )
-    
-    # Calculate means
-    mean_acc = cv_results['test_accuracy'].mean()
-    mean_prec = cv_results['test_precision'].mean()
-    mean_rec = cv_results['test_recall'].mean()
-    mean_f1 = cv_results['test_f1'].mean()
+    # 2. Final Evaluation on the UNSEEN Test Data
+    y_pred = best_model.predict(X_test)
     
     return {
         "Model": model_name,
-        "Accuracy": mean_acc,
-        "Precision": mean_prec,
-        "Recall": mean_rec,
-        "F1-Score": mean_f1,
+        "Accuracy": accuracy_score(y_test, y_pred),
+        "Precision": precision_score(y_test, y_pred),
+        "Recall": recall_score(y_test, y_pred),
+        "F1-Score": f1_score(y_test, y_pred),
         "Best Params": str(best_params)
     }
 
@@ -149,16 +135,12 @@ def tune_and_evaluate(model_name, classifier, param_grid, X, y, cv=10):
 # =============================================================================
 
 def plot_comparison(results, filename="outputs/model_comparison.png"):
-    """Plot a bar chart comparing model accuracies and save it to a file."""
-    # Sort by F1-Score (since it balances precision and recall)
+    """Plot a bar chart comparing model F1-Scores on the Test set."""
     df = pd.DataFrame(results).sort_values("F1-Score", ascending=True)
     
     plt.figure(figsize=(10, 6))
-    
-    # We will plot the F1-Score, as it's the best overall metric
     bars = plt.barh(df["Model"], df["F1-Score"], color="skyblue", edgecolor="black")
     
-    # Add labels on each bar
     for bar, f1 in zip(bars, df["F1-Score"]):
         plt.text(
             bar.get_width() + 0.005,
@@ -168,8 +150,8 @@ def plot_comparison(results, filename="outputs/model_comparison.png"):
             fontsize=11
         )
     
-    plt.xlabel("F1-Score")
-    plt.title("Final Model Comparison (Tuned via Grid Search + 10-Fold CV)")
+    plt.xlabel("F1-Score (on Unseen Test Set)")
+    plt.title("Final Model Comparison (Tuned on Train, Evaluated on Test)")
     plt.xlim(0, 1.0)
     plt.tight_layout()
     
@@ -184,7 +166,7 @@ def plot_comparison(results, filename="outputs/model_comparison.png"):
 # =============================================================================
 
 def main():
-    """Run the complete NLP pipeline with Grid Search tuning."""
+    """Run the complete NLP pipeline with rigorous Train/Test separation."""
     
     # Step 1: Setup and Data Loading
     download_nltk_data()
@@ -195,40 +177,49 @@ def main():
     X, cv_vectorizer = build_bag_of_words(corpus, max_features=1500)
     y = dataset.iloc[:, -1].values
     
-    # Step 3: Define the models AND their hyperparameter grids
+    # Step 3: THE GOLD STANDARD SPLIT
+    # We lock away 20% of the data NOW. The models will never see it during tuning.
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=0
+    )
+    print(f"Train shape: {X_train.shape}, Test shape: {X_test.shape}")
+    
+    # Step 4: Define the models AND their hyperparameter grids
     models_and_params = {
         "Gaussian Naive Bayes": {
             "model": GaussianNB(),
-            "params": {}  # No hyperparameters to tune
+            "params": {}  
         },
         "Multinomial Naive Bayes": {
             "model": MultinomialNB(),
-            "params": {"alpha": [0.1, 0.5, 1.0]}
+            "params": {"alpha": [0.1, 0.5, 1.0]} 
         },
         "Logistic Regression": {
             "model": LogisticRegression(max_iter=1000, random_state=0),
-            "params": {"C": [0.1, 1, 10]}
+            "params": {"C": [0.1, 1, 10]} 
         },
         "Linear SVM": {
             "model": SVC(kernel='linear', random_state=0),
-            "params": {"C": [0.1, 1, 10]}
+            "params": {"C": [0.1, 1, 10]} 
         },
     }
     
     results = []
     
-    # Step 4: Tune and Evaluate each model
+    # Step 5: Tune on Train, Evaluate on Test
     for name, mp in models_and_params.items():
-        result = tune_and_evaluate(name, mp["model"], mp["params"], X, y, cv=10)
+        result = tune_and_evaluate(
+            name, mp["model"], mp["params"], 
+            X_train, y_train, X_test, y_test, cv=10
+        )
         results.append(result)
     
-    # Step 5: Print the Final Summary Table
-    print("\n" + "=" * 80)
-    print("FINAL RESULTS: GRID SEARCH + 10-FOLD CROSS-VALIDATION")
-    print("=" * 80)
+    # Step 6: Print the Final Summary Table
+    print("\n" + "=" * 85)
+    print("FINAL RESULTS: EVALUATED ON UNSEEN TEST DATA (20%)")
+    print("=" * 85)
     
     summary = pd.DataFrame(results)
-    # Sort by F1-Score to find the overall best model
     summary = summary.sort_values("F1-Score", ascending=False)
     
     # Format metric columns as percentages
@@ -237,7 +228,7 @@ def main():
         
     print(summary[["Model", "Accuracy", "Precision", "Recall", "F1-Score", "Best Params"]].to_string(index=False))
     
-    # Step 6: Plot the Results
+    # Step 7: Plot the Results
     plot_comparison(results)
 
 
