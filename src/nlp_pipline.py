@@ -150,8 +150,8 @@ def plot_comparison(results, filename="outputs/model_comparison.png"):
             fontsize=11
         )
     
-    plt.xlabel("F1-Score (on Unseen Test Set)")
-    plt.title("Final Model Comparison (Tuned on Train, Evaluated on Test)")
+    plt.xlabel("F1-Score")
+    plt.title("Final Model Comparison: F1-Score")
     plt.xlim(0, 1.0)
     plt.tight_layout()
     
