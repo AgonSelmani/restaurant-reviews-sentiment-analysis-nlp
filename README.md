@@ -29,27 +29,25 @@ The pipeline follows these key steps:
    - Applied Porter Stemming to reduce words to their root forms (e.g., "loved" to "love").
    - Removed stopwords, except for "not", which is crucial for sentiment analysis.
 3. **Feature Extraction:** Used `CountVectorizer` with `max_features=1500` to keep only the 1,500 most frequent words, converting the text into a sparse matrix.
-4. **Evaluation Strategy:** The dataset was evaluated using two methods:
-   - A single 80/20 Train/Test Split to generate Confusion Matrices.
-   - 10-Fold Cross-Validation to ensure the final model rankings are statistically robust and not due to random chance.
+4. **Model Tuning and Evaluation:** To ensure maximum performance, all models were tuned using **Grid Search** (testing different regularization strengths and smoothing parameters). The models were then evaluated using **10-Fold Cross-Validation** to provide a statistically robust estimate of real-world performance. The final ranking is based on the **F1-Score**, which balances Precision (the quality of positive predictions) and Recall (the ability to find all positive reviews).
 
 ## Model Comparison and Results
 
-Four classifiers were evaluated. The final ranking is based on the 10-Fold Cross-Validation results, as they provide the most reliable estimate of real-world performance.
+Four classifiers were tuned and evaluated. The final results represent the average metrics across 10-Fold Cross-Validation.
 
 ![Model Comparison](outputs/model_comparison.png)
 
-| Model | 10-Fold CV Accuracy | Key Takeaway |
-| :--- | :--- | :--- |
-| **Logistic Regression** | **80.30%** | Winner. Best performance on sparse text data with built-in regularization. |
-| Linear SVM | 79.90% | Extremely close second. Highly effective for high-dimensional data. |
-| Multinomial Naive Bayes | 78.80% | Strong performance. Validates the theory that it is the correct NB variant for text. |
-| Gaussian Naive Bayes | 67.70% | Lowest performance. The single train/test split gave a lucky 73%, but CV revealed its true lower accuracy due to incorrect distribution assumptions. |
+| Model | Accuracy | Precision | Recall | F1-Score | Best Parameters |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Logistic Regression** | **80.90%** | **82.38%** | 79.40% | **80.59%** | `C=10` |
+| Linear SVM | 79.90% | 81.21% | 78.60% | 79.67% | `C=1` |
+| Multinomial Naive Bayes | 78.80% | 78.71% | 79.00% | 78.78% | `alpha=1.0` |
+| Gaussian Naive Bayes | 67.70% | 63.30% | 84.60% | 72.35% | N/A |
 
 ### Key Findings:
-1. **Logistic Regression** achieved the highest average accuracy across all 10 folds, making it the most reliable model for this dataset.
-2. **Multinomial Naive Bayes** outperformed **Gaussian Naive Bayes** by over 11%. This confirms the mathematical theory: MultinomialNB is designed for discrete word counts, while GaussianNB assumes continuous, normally distributed data.
-3. **Cross-Validation proved crucial:** The initial single train/test split gave GaussianNB a lucky score (73.00%), but the 10-Fold CV exposed its true, unstable nature (67.70%). 
+1. **Logistic Regression** achieved the highest F1-Score (80.59%), proving it has the most reliable balance between finding positive reviews and avoiding false alarms. Grid Search found that a regularization strength of `C=10` was optimal.
+2. **Gaussian Naive Bayes** achieved a high Recall (84.60%) but a very poor Precision (63.30%). This means it predicted positive for almost every review, resulting in a massive number of false positives. This demonstrates why Accuracy and Recall alone can be misleading, and why F1-Score is the superior metric for ranking.
+3. **Multinomial Naive Bayes** outperformed Gaussian Naive Bayes by over 6%, confirming the mathematical theory that MultinomialNB is designed for discrete word counts, while GaussianNB assumes continuous, normally distributed data.
 
 ## Project Structure
 
@@ -74,7 +72,7 @@ restaurant-reviews-nlp/
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/your-username/restaurant-reviews-nlp.git
+git clone https://github.com/agonselmani/restaurant-reviews-nlp.git
 cd restaurant-reviews-nlp
 ```
 
@@ -83,7 +81,7 @@ cd restaurant-reviews-nlp
 pip install -r requirements.txt
 ```
 
-3. Run the Python pipeline script. Note: This script will train the models, print evaluation metrics to the console, and automatically save the comparison chart to the `outputs/` folder:
+3. Run the Python pipeline script. Note: This script will clean the data, train the models using Grid Search, print evaluation metrics to the console, and automatically save the comparison chart to the `outputs/` folder:
 ```bash
 python src/nlp_pipeline.py
 ```
@@ -101,10 +99,3 @@ The project requires the following Python libraries (available in `requirements.
 
 Agon Selmani
 - GitHub: [agonselmani](https://github.com/agonselmani)
-
-## Acknowledgements
-
-- Kirill Eremenko and Hadelin de Ponteves for the Machine Learning A-Z course.
-- The open-source community for NLTK and scikit-learn.
-```
-
